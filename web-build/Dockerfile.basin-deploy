@@ -1,0 +1,12 @@
+#ddev-generated
+
+RUN apt install ansible
+
+USER $username
+
+# TODO: Require a stable version
+RUN composer global require --no-cache upstreamable/ddev-basin-deploy:dev-main && \
+  ansible-galaxy install ansistrano.deploy
+
+# Switch back to root for other dockerfiles
+USER root

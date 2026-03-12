@@ -7,41 +7,25 @@
 
 ## Overview
 
-This add-on integrates Basin Deploy into your [DDEV](https://ddev.com/) project.
+This add-on integrates Basin Deploy with ansistrano into your [DDEV](https://ddev.com/) project.
 
 ## Installation
 
 ```bash
-ddev add-on get upstreamable/ddev-basin-deploy
+ddev add-on get  https://github.com/upstreamable/ddev-basin-deploy/tarball/main
 ddev restart
 ```
-
-After installation, make sure to commit the `.ddev` directory to version control.
 
 ## Usage
 
-| Command | Description |
-| ------- | ----------- |
-| `ddev describe` | View service status and used ports for Basin Deploy |
-| `ddev logs -s basin-deploy` | Check Basin Deploy logs |
+Add to `.ddev/.env.web` the following variables
+```
+ANSIBLE_REMOTE_USER=ubuntu
+ANSIBLE_REMOTE_HOST=1.1.1.1
+```
+Replace by the values you would use in a ssh connection such as `ubuntu@1.1.1.1`.
 
 ## Advanced Customization
-
-To change the Docker image:
-
-```bash
-ddev dotenv set .ddev/.env.basin-deploy --basin-deploy-docker-image="ddev/ddev-utilities:latest"
-ddev add-on get upstreamable/ddev-basin-deploy
-ddev restart
-```
-
-Make sure to commit the `.ddev/.env.basin-deploy` file to version control.
-
-All customization options (use with caution):
-
-| Variable | Flag | Default |
-| -------- | ---- | ------- |
-| `BASIN_DEPLOY_DOCKER_IMAGE` | `--basin-deploy-docker-image` | `ddev/ddev-utilities:latest` |
 
 ## Credits
 

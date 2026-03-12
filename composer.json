@@ -1,0 +1,23 @@
+{
+  "name": "upstreamable/ddev-basin-deploy",
+  "description": "Add commands to ddev-basin to deploy with ansistrano",
+  "license": "GPL-3.0-or-later",
+  "minimum-stability": "dev",
+  "prefer-stable": false,
+  "authors": [
+    { "name": "Rodrigo Aguilera", "email": "hi@rodrigoaguilera.net" }
+  ],
+  "require": {
+    "upstreamable/ddev-basin": "*"
+  },
+  "autoload": {
+    "psr-4": {
+      "Basin\\": "src/"
+    }
+  },
+  "config": {
+    "optimize-autoloader": true,
+    "preferred-install": "dist",
+    "sort-packages": true
+  }
+}
