@@ -7,7 +7,7 @@ RUN apt update && \
 USER $username
 
 # TODO: Require a stable version
-RUN composer global require --no-cache upstreamable/ddev-basin-deploy:dev-main && \
+RUN composer global require --no-cache "upstreamable/ddev-basin:*@dev" "upstreamable/ddev-basin-deploy:*@dev" && \
   ansible-galaxy install ansistrano.deploy
 
 # Switch back to root for other dockerfiles
