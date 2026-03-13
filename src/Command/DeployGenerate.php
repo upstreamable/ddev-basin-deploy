@@ -12,6 +12,7 @@ class DeployGenerate
 {
     public function __invoke(OutputInterface $output): int
     {
+        $afterUpdateCodeTasksPath = getenv('DDEV_APPROOT') . '/.ddev/deploy-after-update-code.yml';
         $ansiblePlaybook = [
             'name' => 'Ansistrano deploy',
             'hosts' => 'all',
@@ -19,14 +20,134 @@ class DeployGenerate
                 'ansistrano_deploy_from' => "{{ lookup('env','DDEV_APPROOT') }}/",
                 'ansistrano_deploy_to' => "~/deploy/{{ lookup('env','DDEV_PROJECT') }}-{{ lookup('env','DDEV_ANSIBLE_ENVIRONMENT') | default('production', true) }}",
                 'ansistrano_keep_releases' => 3,
-                // TODO: add 'ansistrano_rsync_extra_params' => '--exclude-from=/etc/ansible/rsync-exclude',
                 'ansistrano_deploy_via' => 'rsync',
+                'ansistrano_after_update_code_tasks_file' => $afterUpdateCodeTasksPath,
+                'ansistrano_before_cleanup_tasks_file' => "{{ lookup('env','DDEV_APPROOT') }}/.ddev/ansible/before-cleanup-tasks.yml",
+                'ansistrano_rsync_extra_params' => "--exclude-from={{ lookup('env','DDEV_APPROOT') }}/.ddev/ansible/rsync-exclude",
+                'ddev_project_name' => "{{ lookup('env','DDEV_PROJECT') }}",
+                'ddev_ansible_environment' => "{{ lookup('env','DDEV_ANSIBLE_ENVIRONMENT') | default('production', true) }}",
+                'ddev_cron_job_minute' => "{{ lookup('env','DDEV_CRON_JOB_MINUTE') | default(60 | random(), true) }}",
+                'ddev_cron_job_hour' => "{{ lookup('env','DDEV_CRON_JOB_HOUR') | default(6 | random(start=1), true) }}",
+                'ddev_cron_job_day' => "{{ lookup('env','DDEV_CRON_JOB_DAY') | default('*', true) }}",
+                'ddev_cron_job_month' => "{{ lookup('env','DDEV_CRON_JOB_MONTH') | default('*', true) }}",
+                'ddev_cron_job_weekday' => "{{ lookup('env','DDEV_CRON_JOB_WEEKDAY') | default('*', true) }}",
             ],
             'roles' => [[
                 'role' => 'ansistrano.deploy',
             ]],
         ];
+
+
+        $afterUpdateCodeTasks = [];
+        $afterUpdateCodeTasks[] = [
+            'name' => 'Get status of current release',
+            'stat' => [
+                'path' => "{{ ansistrano_deploy_to }}/current",
+            ],
+            'register' => 'current_release',
+        ];
+        $afterUpdateCodeTasks[] = [
+            'name' => 'Register the current release version',
+            'ansible.builtin.slurp' => [
+                'src' => "{{ ansistrano_deploy_to }}/current/REVISION",
+            ],
+            'register' => 'ansistrano_current_release_version',
+            'when' => 'current_release.stat.exists',
+        ];
+        $afterUpdateCodeTasks[] = [
+            'name' => 'Stop current release',
+            'shell' => 'ddev stop',
+            'args' => [
+                'chdir' => "{{ ansistrano_deploy_to }}/current",
+            ],
+            'when' => 'current_release.stat.exists',
+            'register' => 'stop_result',
+        ];
+        $afterUpdateCodeTasks[] = [
+            'name' => 'Log the standard output of stopping the current release',
+            'copy' => [
+                'content' => '{{ stop_result.stdout }}',
+                'dest' =>
+                '{{ ansistrano_shared_path }}/{{ ansistrano_release_version }}.stop-current.stdout.log.txt',
+            ],
+            'when' => 'current_release.stat.exists',
+        ];
+        $afterUpdateCodeTasks[] = [
+            'name' => 'Log the standard error output of stopping the current release',
+            'copy' => [
+                'content' => '{{ stop_result.stderr }}',
+                'dest' =>
+                '{{ ansistrano_shared_path }}/{{ ansistrano_release_version }}.stop-current.stderr.log.txt',
+            ],
+            'when' => 'current_release.stat.exists',
+        ];
+
+        // TODO: Inspect volumes to avoid hardcoding mariadb.
+        $afterUpdateCodeTasks[] = [
+            'name' => 'Copy volumes from the current release to the next one',
+            'shell' => 'docker container run --rm ' .
+            '--volume {{ ddev_project_name }}-{{ ddev_ansible_environment }}-{{ ansistrano_current_release_version.content | b64decode | lower }}-mariadb:/from ' .
+            '--volume {{ ddev_project_name }}-{{ ddev_ansible_environment }}-{{ ansistrano_release_version | lower }}-mariadb:/to ' .
+            'alpine:3.23.3 sh -c "cd /from ; cp -a . /to"',
+            'when' => 'current_release.stat.exists',
+        ];
+        $afterUpdateCodeTasks[] = [
+            'name' => 'Config the app to include environment and version',
+            'shell' => 'ddev config --project-name "{{ ddev_project_name }}-{{ ddev_ansible_environment }}-{{ ansistrano_release_version | lower }}"',
+            'args' => [
+                'chdir' => '{{ ansistrano_release_path.stdout }}',
+            ],
+        ];
+        $afterUpdateCodeTasks[] = [
+            'name' => 'Start the app',
+            'shell' => 'ddev start',
+            'args' => [
+                'chdir' => '{{ ansistrano_release_path.stdout }}',
+            ],
+            'register' => 'start_result',
+        ];
+        $afterUpdateCodeTasks[] = [
+            'name' => 'Log the standard output of starting the app',
+            'copy' => [
+                'content' => '{{ start_result.stdout }}',
+                'dest' => '{{ ansistrano_shared_path }}/{{ ansistrano_release_version }}.start.stdout.log.txt',
+            ],
+        ];
+        $afterUpdateCodeTasks[] = [
+            'name' => 'Log the error output of starting the app',
+            'copy' => [
+                'content' => '{{ start_result.stderr }}',
+                'dest' => '{{ ansistrano_shared_path }}/{{ ansistrano_release_version }}.start.stderr.log.txt',
+            ],
+        ];
+
+        // TODO: do not hardcode drush.
+        $ansibleCronConfig = [
+            'name' => 'DDEV cron job for {{ ddev_project_name }}-{{ ddev_ansible_environment }}',
+            'job' => 'cd {{ ansistrano_deploy_to }}/current && ddev drush cron ',
+            'minute' => '{{ ddev_cron_job_minute }}',
+            'hour' => '{{ ddev_cron_job_hour }}',
+            'day' => '{{ ddev_cron_job_day }}',
+            'month' => '{{ ddev_cron_job_month }}',
+            'weekday' => '{{ ddev_cron_job_weekday }}',
+        ];
+
+        $afterUpdateCodeTasks[] = [
+            'name' => 'Install cron job on the host machine',
+            'cron' => $ansibleCronConfig,
+        ];
+
+        file_put_contents(
+            $afterUpdateCodeTasksPath,
+            Yaml::dump(
+                input: $afterUpdateCodeTasks ,
+                inline: 4,
+                flags: Yaml::DUMP_MULTI_LINE_LITERAL_BLOCK
+            )
+        );
+
         $ansiblePlaybookPath = getenv('DDEV_APPROOT') . '/.ddev/deploy.yml';
+
         file_put_contents(
             $ansiblePlaybookPath,
             Yaml::dump(

@@ -1,0 +1,24 @@
+---
+# Adapted from https://github.com/ansistrano/deploy/blob/master/tasks/cleanup.yml
+- name: Get the releases to remove.
+  shell: >-
+    ls -1dt {{ ansistrano_releases_path }}/* |
+    tail -n +{{ ansistrano_keep_releases | int + 1 }}
+  register: releases_to_remove
+
+# Apps like Drupal might modify files to be read-only
+# preventing ansible from deleting them.
+- name: Ensure directories are writable before delete.
+  file:
+    path: '{{ item }}'
+    mode: 'u+rw'
+    recurse: yes
+  loop: "{{ releases_to_remove.stdout_lines }}"
+  when: ansistrano_keep_releases | int > 0
+
+- name: Remove artifacts before cleanup.
+  shell: 'ddev delete --yes --omit-snapshot'
+  args:
+    chdir: "{{ item }}"
+  loop: "{{ releases_to_remove.stdout_lines }}"
+  when: ansistrano_keep_releases | int > 0
