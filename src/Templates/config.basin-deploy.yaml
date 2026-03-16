@@ -1,0 +1,3 @@
+web_environment:
+  - ANSIBLE_REMOTE_USER=username
+  - ANSIBLE_REMOTE_HOST=X.X.X.X

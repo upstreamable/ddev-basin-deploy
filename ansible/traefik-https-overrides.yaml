@@ -7,3 +7,9 @@ http:
     {{ ddev_project_name }}-{{ ddev_ansible_environment }}-{{ ansistrano_release_version | lower }}-xhgui-80-https:
       # Avoid issuing TLS certificates for xhgui
       tls: false
+    {% if ddev_redirect_https == 'true' %}
+    # Enable the middleware to redirect to https
+    {{ ddev_project_name }}-{{ ddev_ansible_environment }}-{{ ansistrano_release_version | lower }}-web-80-http:
+      middlewares:
+        - "{{ ddev_project_name }}-{{ ddev_ansible_environment }}-{{ ansistrano_release_version | lower }}-redirectHttps"
+    {% endif %}

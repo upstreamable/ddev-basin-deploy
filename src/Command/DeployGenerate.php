@@ -6,11 +6,15 @@ use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Yaml\Yaml;
+use Symfony\Component\Console\Attribute\Argument;
 
 #[AsCommand(name: 'deploy:generate')]
 class DeployGenerate
 {
-    public function __invoke(OutputInterface $output): int
+    public function __invoke(
+        #[Argument('The environment to create defaults for.')] string $environment = 'production',
+        OutputInterface $output
+    ): int
     {
         $ddevDockerCompose = Yaml::parseFile(getenv('DDEV_APPROOT') . '/.ddev/.ddev-docker-compose-full.yaml');
         $ddevFilesDirs = $ddevDockerCompose['services']['web']['environment']['DDEV_FILES_DIRS'];
@@ -38,6 +42,7 @@ class DeployGenerate
                 'ddev_project_name' => "{{ lookup('env','DDEV_PROJECT') }}",
                 'ddev_approot' => "{{ lookup('env','DDEV_APPROOT') }}",
                 'ddev_upload_dirs' => $ddevUploadDirs,
+                'ddev_redirect_https' => "{{ lookup('env','DDEV_REDIRECT_HTTPS') | default('true', true) }}",
                 'ddev_ansible_environment' => "{{ lookup('env','DDEV_ANSIBLE_ENVIRONMENT') | default('production', true) }}",
                 'ddev_cron_job_minute' => "{{ lookup('env','DDEV_CRON_JOB_MINUTE') | default(60 | random(), true) }}",
                 'ddev_cron_job_hour' => "{{ lookup('env','DDEV_CRON_JOB_HOUR') | default(6 | random(start=1), true) }}",
@@ -223,7 +228,7 @@ class DeployGenerate
             )
         );
 
-        $ansiblePlaybookPath = getenv('DDEV_APPROOT') . '/.ddev/deploy.yml';
+        $ansiblePlaybookPath = getenv('DDEV_APPROOT') . '/.ddev/deploy.yaml';
 
         file_put_contents(
             $ansiblePlaybookPath,
@@ -234,7 +239,26 @@ class DeployGenerate
             )
         );
 
-        $output->writeln('.ddev/deploy.yml generated');
+        $output->writeln('/.ddev/deploy.yaml generated');
+
+        $deployConfigPath = getenv('DDEV_APPROOT') . '/.ddev/config.basin-deploy.yaml');
+        if (!file_exists($deployConfigPath)) {
+            copy(__DIR__ '/../Templates/config.basin-deploy.yaml', $deployConfigPath);
+            $output->writeln('/.ddev/config.basin-deploy.yaml generated. Edit it to complete the server details');
+        }
+
+        $ddevConfig = Yaml::parseFile(getenv('DDEV_APPROOT') . '/.ddev/config.yaml');
+        $deployEnvironmentPath = getenv('DDEV_APPROOT') . '/.ddev/deploy.' . $environment . '.env.web');
+        if (!file_exists($deployEnvironmentPath) && str_starts_with($ddevConfig['type'], 'drupal')) {
+            copy(__DIR__ '/../Templates/deploy.drupal.env.web', $deployEnvironmentPath);
+            $output->writeln('/.ddev/deploy.' . $environment . '.env.web generated for "' . $ddevConfig['type'] . '". Edit it to complete the environment details');
+        }
+
+        $deployHostnamePath = getenv('DDEV_APPROOT') . '/.ddev/deploy.' . $environment . '.hostname.config.yaml');
+        if (!file_exists($deployHostnamePath)) {
+            copy(__DIR__ '/../Templates/deploy.hostname.config.yaml', $deployEnvironmentPath);
+            $output->writeln('/.ddev/deploy.' . $environment . '.hostname.config.yaml generated. Edit it to complete the hostname details');
+        }
 
         return Command::SUCCESS;
     }

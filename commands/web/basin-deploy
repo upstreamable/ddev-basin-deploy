@@ -1,8 +1,8 @@
 #!/usr/bin/env sh
 
 #ddev-generated
-## Description: Create a new deploy
+## Description: Run a deploy of the current code
 ## Usage: basin-deploy
-## Example: "ddev basin-deploy"
+## Example: "ddev basin-deploy production"
 
-DDEV_ANSIBLE_ENVIRONMENT="${1:-production}" ansible-playbook "${DDEV_APPROOT}/.ddev/deploy.yml" "--inventory=${ANSIBLE_REMOTE_HOST},"
+DDEV_ANSIBLE_ENVIRONMENT="${1:-production}" ansible-playbook "${DDEV_APPROOT}/.ddev/deploy.yaml" "--inventory=${ANSIBLE_REMOTE_HOST},"
