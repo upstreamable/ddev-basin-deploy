@@ -1,4 +1,5 @@
 ---
+#ddev-generated
 # Adapted from https://github.com/ansistrano/deploy/blob/master/tasks/cleanup.yml
 - name: Get the releases to remove.
   shell: >-

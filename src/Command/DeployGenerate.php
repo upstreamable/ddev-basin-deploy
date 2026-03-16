@@ -12,7 +12,16 @@ class DeployGenerate
 {
     public function __invoke(OutputInterface $output): int
     {
+        $ddevDockerCompose = Yaml::parseFile(getenv('DDEV_APPROOT') . '/.ddev/.ddev-docker-compose-full.yaml');
+        $ddevFilesDirs = $ddevDockerCompose['services']['web']['environment']['DDEV_FILES_DIRS'];
+        // Get the upload dirs as an array of relative paths like:
+        // ['web/sites/default/files'].
+        $ddevUploadDirs = array_map(function ($uploadDir) {
+            return str_replace(getenv('DDEV_APPROOT') . '/', '', $uploadDir);
+        }, explode(',', $ddevFilesDirs));
+
         $afterUpdateCodeTasksPath = getenv('DDEV_APPROOT') . '/.ddev/deploy-after-update-code.yml';
+
         $ansiblePlaybook = [
             'name' => 'Ansistrano deploy',
             'hosts' => 'all',
@@ -22,9 +31,13 @@ class DeployGenerate
                 'ansistrano_keep_releases' => 3,
                 'ansistrano_deploy_via' => 'rsync',
                 'ansistrano_after_update_code_tasks_file' => $afterUpdateCodeTasksPath,
-                'ansistrano_before_cleanup_tasks_file' => "{{ lookup('env','DDEV_APPROOT') }}/.ddev/ansible/before-cleanup-tasks.yml",
-                'ansistrano_rsync_extra_params' => "--exclude-from={{ lookup('env','DDEV_APPROOT') }}/.ddev/ansible/rsync-exclude",
+                'ansistrano_before_cleanup_tasks_file' => "{{ lookup('env','DDEV_APPROOT') }}/.ddev/ansible/tasks/before-cleanup-tasks.yml",
+                'ansistrano_rsync_extra_params' => [
+                    "--filter='merge " . getenv('DDEV_APPROOT') . "/.ddev/ansible/rsync-filter'",
+                ],
                 'ddev_project_name' => "{{ lookup('env','DDEV_PROJECT') }}",
+                'ddev_approot' => "{{ lookup('env','DDEV_APPROOT') }}",
+                'ddev_upload_dirs' => $ddevUploadDirs,
                 'ddev_ansible_environment' => "{{ lookup('env','DDEV_ANSIBLE_ENVIRONMENT') | default('production', true) }}",
                 'ddev_cron_job_minute' => "{{ lookup('env','DDEV_CRON_JOB_MINUTE') | default(60 | random(), true) }}",
                 'ddev_cron_job_hour' => "{{ lookup('env','DDEV_CRON_JOB_HOUR') | default(6 | random(start=1), true) }}",
@@ -37,6 +50,10 @@ class DeployGenerate
             ]],
         ];
 
+        // Exclude uploaded files from the sync.
+        foreach ($ddevUploadDirs as $dir) {
+            $ansiblePlaybook['vars']['ansistrano_rsync_extra_params'][] = "--filter='exclude /" . $dir ."'";
+        }
 
         $afterUpdateCodeTasks = [];
         $afterUpdateCodeTasks[] = [
@@ -81,6 +98,16 @@ class DeployGenerate
             ],
             'when' => 'current_release.stat.exists',
         ];
+        $afterUpdateCodeTasks[] = [
+            'name' => 'Copy upload_dirs from the current release to the next one',
+            'copy' => [
+                'src' => "{{ ansistrano_deploy_to }}/current/{{ item }}",
+                'dest' => '{{ ansistrano_release_path.stdout }}/{{ item }}',
+                'remote_src' => TRUE,
+            ],
+            'loop' => '{{ ddev_upload_dirs }}',
+            'when' => 'current_release.stat.exists',
+        ];
 
         // TODO: Inspect volumes to avoid hardcoding mariadb.
         $afterUpdateCodeTasks[] = [
@@ -98,6 +125,56 @@ class DeployGenerate
                 'chdir' => '{{ ansistrano_release_path.stdout }}',
             ],
         ];
+        $afterUpdateCodeTasks[] = [
+            'name' => 'Get possible environment overrides',
+            'stat' => [
+                'path' => "{{ ansistrano_release_path.stdout }}/.ddev/deploy.{{ ddev_ansible_environment }}.env.web",
+            ],
+            'register' => 'ddev_env_web_overrides',
+        ];
+        $afterUpdateCodeTasks[] = [
+            'name' => 'Copy web env web overrides',
+            'copy' => [
+                'src' => "{{ ansistrano_release_path.stdout }}/.ddev/deploy.{{ ddev_ansible_environment }}.env.web",
+                'dest' => "{{ ansistrano_release_path.stdout }}/.ddev/.env.web",
+                'remote_src' => TRUE,
+            ],
+            'when' => 'ddev_env_web_overrides.stat.exists',
+        ];
+        $afterUpdateCodeTasks[] = [
+            'name' => 'Get possible hostname overrides',
+            'stat' => [
+                'path' => "{{ ansistrano_release_path.stdout }}/.ddev/deploy.{{ ddev_ansible_environment }}.hostname.config.yaml",
+            ],
+            'register' => 'ddev_hostname_overrides',
+        ];
+        $afterUpdateCodeTasks[] = [
+            'name' => 'Copy hostname overrides',
+            'copy' => [
+                'src' => "{{ ansistrano_release_path.stdout }}/.ddev/deploy.{{ ddev_ansible_environment }}.hostname.config.yaml",
+                'dest' => "{{ ansistrano_release_path.stdout }}/.ddev/config.hostname.yaml",
+                'remote_src' => TRUE,
+            ],
+            'when' => 'ddev_hostname_overrides.stat.exists',
+        ];
+        $afterUpdateCodeTasks[] = [
+            'name' => 'Register the hostname configuration',
+            'ansible.builtin.slurp' => [
+                'src' => "{{ ansistrano_release_path.stdout }}/.ddev/config.hostname.yaml",
+            ],
+            'register' => 'ddev_hostname_config',
+            'when' => 'ddev_hostname_overrides.stat.exists',
+        ];
+
+        $afterUpdateCodeTasks[] = [
+            'name' => 'Configure HTTPS overrides for traefik to issue letsencrypt certificates only for additional_fqdns',
+            'ansible.builtin.template' => [
+                'src' => getenv('DDEV_APPROOT') . '/.ddev/ansible/traefik-https-overrides.yaml',
+                'dest' => "{{ ansistrano_release_path.stdout }}/.ddev/traefik/config/deploy.yaml",
+            ],
+            'when' => 'ddev_hostname_overrides.stat.exists',
+        ];
+
         $afterUpdateCodeTasks[] = [
             'name' => 'Start the app',
             'shell' => 'ddev start',
@@ -156,6 +233,8 @@ class DeployGenerate
                 flags: Yaml::DUMP_MULTI_LINE_LITERAL_BLOCK
             )
         );
+
+        $output->writeln('.ddev/deploy.yml generated');
 
         return Command::SUCCESS;
     }

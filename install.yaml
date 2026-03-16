@@ -4,6 +4,7 @@ project_files:
   - web-build/Dockerfile.basin-deploy
   - commands/web/basin-deploy
   - ansible/tasks/before-cleanup-tasks.yml
-  - ansible/rsync-exclude
+  - ansible/rsync-filter
+  - ansible/traefik-https-overrides.yaml
 
 ddev_version_constraint: '>= v1.25.1'

@@ -1,0 +1,9 @@
+#ddev-generated
+http:
+  routers:
+    {{ ddev_project_name }}-{{ ddev_ansible_environment }}-{{ ansistrano_release_version | lower }}-web-80-https:
+      # Rule override to include only the additional_fqdns instead of all hosts
+      rule: {{ (ddev_hostname_config.content | b64decode | from_yaml).additional_fqdns | map('regex_replace', '^(.+)$', 'Host(`\\1`)') | list | join(' || ') }}
+    {{ ddev_project_name }}-{{ ddev_ansible_environment }}-{{ ansistrano_release_version | lower }}-xhgui-80-https:
+      # Avoid issuing TLS certificates for xhgui
+      tls: false
