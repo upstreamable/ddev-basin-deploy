@@ -7,4 +7,7 @@ project_files:
   - ansible/rsync-filter
   - ansible/traefik-https-overrides.yaml
 
+dependencies:
+  - https://github.com/upstreamable/ddev-basin/tarball/main
+
 ddev_version_constraint: '>= v1.25.1'
