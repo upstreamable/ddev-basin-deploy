@@ -24,7 +24,7 @@ class DeployGenerate
             return str_replace(getenv('DDEV_APPROOT') . '/', '', $uploadDir);
         }, explode(',', $ddevFilesDirs));
 
-        $afterUpdateCodeTasksPath = getenv('DDEV_APPROOT') . '/.ddev/deploy-after-update-code.yml';
+        $afterUpdateCodeTasksPath = getenv('DDEV_APPROOT') . '/.ddev/deploy.after-update-code.yml';
 
         $ansiblePlaybook = [
             'name' => 'Ansistrano deploy',
@@ -85,21 +85,12 @@ class DeployGenerate
             'when' => 'current_release.stat.exists',
             'register' => 'stop_result',
         ];
+
         $afterUpdateCodeTasks[] = [
-            'name' => 'Log the standard output of stopping the current release',
+            'name' => 'Log the output of stopping the current release',
             'copy' => [
-                'content' => '{{ stop_result.stdout }}',
-                'dest' =>
-                '{{ ansistrano_shared_path }}/{{ ansistrano_release_version }}.stop-current.stdout.log.txt',
-            ],
-            'when' => 'current_release.stat.exists',
-        ];
-        $afterUpdateCodeTasks[] = [
-            'name' => 'Log the standard error output of stopping the current release',
-            'copy' => [
-                'content' => '{{ stop_result.stderr }}',
-                'dest' =>
-                '{{ ansistrano_shared_path }}/{{ ansistrano_release_version }}.stop-current.stderr.log.txt',
+                'content' => "STDOUT\n{{ stop_result.stdout }}\nSTDERR\n{{ stop_result.stderr }}",
+                'dest' => '{{ ansistrano_release_path.stdout }}/ansible-ddev-stop-current.log.txt',
             ],
             'when' => 'current_release.stat.exists',
         ];
@@ -189,18 +180,12 @@ class DeployGenerate
             'register' => 'start_result',
         ];
         $afterUpdateCodeTasks[] = [
-            'name' => 'Log the standard output of starting the app',
+            'name' => 'Log the output of starting the app',
             'copy' => [
-                'content' => '{{ start_result.stdout }}',
-                'dest' => '{{ ansistrano_shared_path }}/{{ ansistrano_release_version }}.start.stdout.log.txt',
+                'content' => "STDOUT\n{{ start_result.stdout }}\nSTDERR\n{{ start_result.stderr }}",
+                'dest' => '{{ ansistrano_release_path.stdout }}/ansible-ddev-start-current.log.txt',
             ],
-        ];
-        $afterUpdateCodeTasks[] = [
-            'name' => 'Log the error output of starting the app',
-            'copy' => [
-                'content' => '{{ start_result.stderr }}',
-                'dest' => '{{ ansistrano_shared_path }}/{{ ansistrano_release_version }}.start.stderr.log.txt',
-            ],
+            'when' => 'current_release.stat.exists',
         ];
 
         // TODO: do not hardcode drush.
@@ -219,28 +204,7 @@ class DeployGenerate
             'cron' => $ansibleCronConfig,
         ];
 
-        file_put_contents(
-            $afterUpdateCodeTasksPath,
-            Yaml::dump(
-                input: $afterUpdateCodeTasks ,
-                inline: 4,
-                flags: Yaml::DUMP_MULTI_LINE_LITERAL_BLOCK
-            )
-        );
-
-        $ansiblePlaybookPath = getenv('DDEV_APPROOT') . '/.ddev/deploy.yaml';
-
-        file_put_contents(
-            $ansiblePlaybookPath,
-            Yaml::dump(
-                input: [$ansiblePlaybook],
-                inline: 4,
-                flags: Yaml::DUMP_MULTI_LINE_LITERAL_BLOCK
-            )
-        );
-
-        $output->writeln('/.ddev/deploy.yaml generated');
-
+        // Auto-create configuration files for deployment
         $deployConfigPath = getenv('DDEV_APPROOT') . '/.ddev/config.basin-deploy.yaml';
         if (!file_exists($deployConfigPath)) {
             copy(__DIR__  . '/../Templates/config.basin-deploy.yaml', $deployConfigPath);
@@ -260,6 +224,60 @@ class DeployGenerate
             $output->writeln('/.ddev/deploy.' . $environment . '.hostname.config.yaml generated. Edit it to complete the hostname details');
         }
 
+
+        $beforeSymlinkTasksPath = getenv('DDEV_APPROOT') . '/.ddev/deploy.before-symlink-tasks.yml';
+        // TODO: Separate Drupal specifics to another file.
+        if (str_starts_with($ddevConfig['type'], 'drupal')) {
+            $beforeSymlinkTasks[] = [
+                'name' => 'Composer install',
+                'shell' => 'ddev composer install --no-interaction --no-dev --optimize-autoloader',
+                'args' => [
+                    'chdir' => '{{ ansistrano_release_path.stdout }}',
+                ],
+            ];
+            $beforeSymlinkTasks[] = [
+                'name' => 'Deploy drupal',
+                'shell' => 'ddev drush deploy',
+                'args' => [
+                    'chdir' => '{{ ansistrano_release_path.stdout }}',
+                ],
+            ];
+
+            $ansiblePlaybook['vars']['ansistrano_before_symlink_tasks_file'] = $beforeSymlinkTasksPath;
+
+            file_put_contents(
+                $beforeSymlinkTasksPath,
+                Yaml::dump(
+                    input: $beforeSymlinkTasks ,
+                    inline: 4,
+                    flags: Yaml::DUMP_MULTI_LINE_LITERAL_BLOCK
+                )
+            );
+
+            $output->writeln('/.ddev/deploy.before-symlink-tasks.yaml generated for "' . $ddevConfig['type'] . '". Edit it to complete the environment details');
+        }
+
+        file_put_contents(
+            $afterUpdateCodeTasksPath,
+            Yaml::dump(
+                input: $afterUpdateCodeTasks ,
+                inline: 4,
+                flags: Yaml::DUMP_MULTI_LINE_LITERAL_BLOCK
+            )
+        );
+        $output->writeln('/.ddev/deploy.after-update-code.yml generated');
+
+        $ansiblePlaybookPath = getenv('DDEV_APPROOT') . '/.ddev/deploy.yaml';
+
+        file_put_contents(
+            $ansiblePlaybookPath,
+            Yaml::dump(
+                input: [$ansiblePlaybook],
+                inline: 4,
+                flags: Yaml::DUMP_MULTI_LINE_LITERAL_BLOCK
+            )
+        );
+        $output->writeln('/.ddev/deploy.yaml generated');
         return Command::SUCCESS;
     }
 }
