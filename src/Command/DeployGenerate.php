@@ -12,8 +12,8 @@ use Symfony\Component\Console\Attribute\Argument;
 class DeployGenerate
 {
     public function __invoke(
+        OutputInterface $output,
         #[Argument('The environment to create defaults for.')] string $environment = 'production',
-        OutputInterface $output
     ): int
     {
         $ddevDockerCompose = Yaml::parseFile(getenv('DDEV_APPROOT') . '/.ddev/.ddev-docker-compose-full.yaml');
@@ -248,7 +248,7 @@ class DeployGenerate
         }
 
         $ddevConfig = Yaml::parseFile(getenv('DDEV_APPROOT') . '/.ddev/config.yaml');
-        $deployEnvironmentPath = getenv('DDEV_APPROOT') . '/.ddev/deploy.' . $environment . '.env.web');
+        $deployEnvironmentPath = getenv('DDEV_APPROOT') . '/.ddev/deploy.' . $environment . '.env.web';
         if (!file_exists($deployEnvironmentPath) && str_starts_with($ddevConfig['type'], 'drupal')) {
             copy(__DIR__ . '/../Templates/deploy.drupal.env.web', $deployEnvironmentPath);
             $output->writeln('/.ddev/deploy.' . $environment . '.env.web generated for "' . $ddevConfig['type'] . '". Edit it to complete the environment details');
