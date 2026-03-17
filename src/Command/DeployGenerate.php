@@ -243,20 +243,20 @@ class DeployGenerate
 
         $deployConfigPath = getenv('DDEV_APPROOT') . '/.ddev/config.basin-deploy.yaml';
         if (!file_exists($deployConfigPath)) {
-            copy(__DIR__ '/../Templates/config.basin-deploy.yaml', $deployConfigPath);
+            copy(__DIR__  . '/../Templates/config.basin-deploy.yaml', $deployConfigPath);
             $output->writeln('/.ddev/config.basin-deploy.yaml generated. Edit it to complete the server details');
         }
 
         $ddevConfig = Yaml::parseFile(getenv('DDEV_APPROOT') . '/.ddev/config.yaml');
         $deployEnvironmentPath = getenv('DDEV_APPROOT') . '/.ddev/deploy.' . $environment . '.env.web');
         if (!file_exists($deployEnvironmentPath) && str_starts_with($ddevConfig['type'], 'drupal')) {
-            copy(__DIR__ '/../Templates/deploy.drupal.env.web', $deployEnvironmentPath);
+            copy(__DIR__ . '/../Templates/deploy.drupal.env.web', $deployEnvironmentPath);
             $output->writeln('/.ddev/deploy.' . $environment . '.env.web generated for "' . $ddevConfig['type'] . '". Edit it to complete the environment details');
         }
 
         $deployHostnamePath = getenv('DDEV_APPROOT') . '/.ddev/deploy.' . $environment . '.hostname.config.yaml';
         if (!file_exists($deployHostnamePath)) {
-            copy(__DIR__ '/../Templates/deploy.hostname.config.yaml', $deployEnvironmentPath);
+            copy(__DIR__  . '/../Templates/deploy.hostname.config.yaml', $deployEnvironmentPath);
             $output->writeln('/.ddev/deploy.' . $environment . '.hostname.config.yaml generated. Edit it to complete the hostname details');
         }
 
