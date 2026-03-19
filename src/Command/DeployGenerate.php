@@ -99,7 +99,7 @@ class DeployGenerate
             'copy' => [
                 'src' => "{{ ansistrano_deploy_to }}/current/{{ item }}",
                 'dest' => '{{ ansistrano_release_path.stdout }}/{{ item }}',
-                'remote_src' => TRUE,
+                'remote_src' => true,
             ],
             'loop' => '{{ ddev_upload_dirs }}',
             'when' => 'current_release.stat.exists',
@@ -133,7 +133,7 @@ class DeployGenerate
             'copy' => [
                 'src' => "{{ ansistrano_release_path.stdout }}/.ddev/deploy.{{ ddev_ansible_environment }}.env.web",
                 'dest' => "{{ ansistrano_release_path.stdout }}/.ddev/.env.web",
-                'remote_src' => TRUE,
+                'remote_src' => true,
             ],
             'when' => 'ddev_env_web_overrides.stat.exists',
         ];
@@ -149,7 +149,7 @@ class DeployGenerate
             'copy' => [
                 'src' => "{{ ansistrano_release_path.stdout }}/.ddev/deploy.{{ ddev_ansible_environment }}.hostname.config.yaml",
                 'dest' => "{{ ansistrano_release_path.stdout }}/.ddev/config.hostname.yaml",
-                'remote_src' => TRUE,
+                'remote_src' => true,
             ],
             'when' => 'ddev_hostname_overrides.stat.exists',
         ];
@@ -167,6 +167,32 @@ class DeployGenerate
             'ansible.builtin.template' => [
                 'src' => getenv('DDEV_APPROOT') . '/.ddev/ansible/traefik-https-overrides.yaml',
                 'dest' => "{{ ansistrano_release_path.stdout }}/.ddev/traefik/config/deploy.yaml",
+            ],
+            'when' => 'ddev_hostname_overrides.stat.exists',
+        ];
+
+        $afterUpdateCodeTasks[] = [
+            'name' => 'Get mail sending (msmtp) configuration',
+            'stat' => [
+                'path' => "{{ ansistrano_release_path.stdout }}/.ddev/deploy.{{ ddev_ansible_environment }}.msmtprc",
+            ],
+            'register' => 'ddev_msmtprc',
+        ];
+        $afterUpdateCodeTasks[] = [
+            'name' => 'Copy mail sending configuration to home',
+            'copy' => [
+                'src' => "{{ ansistrano_release_path.stdout }}/.ddev/deploy.{{ ddev_ansible_environment }}.msmtprc",
+                'dest' => "{{ ansistrano_release_path.stdout }}/.ddev/homeadditions/.msmtprc",
+                'remote_src' => true,
+                'mode' => 'u=r',
+            ],
+            'when' => 'ddev_hostname_overrides.stat.exists',
+        ];
+        $afterUpdateCodeTasks[] = [
+            'name' => 'Enable msmtp for php',
+            'copy' => [
+                'dest' => "{{ ansistrano_release_path.stdout }}/.ddev/php/msmtp.ini",
+                'content' => "[PHP]\nsendmail_path = /usr/bin/msmtp -t -i"
             ],
             'when' => 'ddev_hostname_overrides.stat.exists',
         ];
@@ -223,6 +249,11 @@ class DeployGenerate
             copy(__DIR__  . '/../Templates/deploy.hostname.config.yaml', $deployEnvironmentPath);
             $output->writeln('/.ddev/deploy.' . $environment . '.hostname.config.yaml generated. Edit it to complete the hostname details');
         }
+        $msmtprcPath = getenv('DDEV_APPROOT') . '/.ddev/deploy.' . $environment . '.msmtprc';
+        if (!file_exists($msmtprcPath)) {
+            copy(__DIR__  . '/../Templates/msmtprc', $msmtprcPath);
+            $output->writeln('/.ddev/deploy.' . $environment . '.msmtprc generated. Edit it to complete the mail sending details');
+        }
 
 
         $beforeSymlinkTasksPath = getenv('DDEV_APPROOT') . '/.ddev/deploy.before-symlink-tasks.yml';
@@ -254,7 +285,7 @@ class DeployGenerate
                 )
             );
 
-            $output->writeln('/.ddev/deploy.before-symlink-tasks.yaml generated for "' . $ddevConfig['type'] . '". Edit it to complete the environment details');
+            $output->writeln('/.ddev/deploy.before-symlink-tasks.yaml generated for "' . $ddevConfig['type'] . '".');
         }
 
         file_put_contents(
