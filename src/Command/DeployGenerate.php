@@ -90,14 +90,16 @@ class DeployGenerate
             'name' => 'Log the output of stopping the current release',
             'copy' => [
                 'content' => "STDOUT\n{{ stop_result.stdout }}\nSTDERR\n{{ stop_result.stderr }}",
-                'dest' => '{{ ansistrano_release_path.stdout }}/ansible-ddev-stop-current.log.txt',
+                'dest' => '{{ ansistrano_release_path.stdout }}/ansible-ddev-stop-previous-current.log.txt',
             ],
             'when' => 'current_release.stat.exists',
         ];
         $afterUpdateCodeTasks[] = [
             'name' => 'Copy upload_dirs from the current release to the next one',
             'copy' => [
-                'src' => "{{ ansistrano_deploy_to }}/current/{{ item }}",
+                // Trailing slash is important to copy the contents of src and
+                // avoiding a structure like `/files/files/files`, etc.
+                'src' => "{{ ansistrano_deploy_to }}/current/{{ item }}/",
                 'dest' => '{{ ansistrano_release_path.stdout }}/{{ item }}',
                 'remote_src' => true,
             ],
@@ -209,7 +211,7 @@ class DeployGenerate
             'name' => 'Log the output of starting the app',
             'copy' => [
                 'content' => "STDOUT\n{{ start_result.stdout }}\nSTDERR\n{{ start_result.stderr }}",
-                'dest' => '{{ ansistrano_release_path.stdout }}/ansible-ddev-start-current.log.txt',
+                'dest' => '{{ ansistrano_release_path.stdout }}/ansible-ddev-start.log.txt',
             ],
             'when' => 'current_release.stat.exists',
         ];
