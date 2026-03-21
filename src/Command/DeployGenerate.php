@@ -213,7 +213,6 @@ class DeployGenerate
                 'content' => "STDOUT\n{{ start_result.stdout }}\nSTDERR\n{{ start_result.stderr }}",
                 'dest' => '{{ ansistrano_release_path.stdout }}/ansible-ddev-start.log.txt',
             ],
-            'when' => 'current_release.stat.exists',
         ];
 
         // TODO: do not hardcode drush.
