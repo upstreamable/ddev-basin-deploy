@@ -1,0 +1,4 @@
+override_config: true
+additional_fqdns:
+    - www.example.com
+    - example.com
