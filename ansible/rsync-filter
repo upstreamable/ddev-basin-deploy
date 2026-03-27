@@ -1,3 +1,5 @@
 #ddev-generated
 exclude /.git
 exclude /.gitignore
+# The image deployed does not need ansible
+exclude /.ddev/web-build/Dockerfile.basin-deploy
